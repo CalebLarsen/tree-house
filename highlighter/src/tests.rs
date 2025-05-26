@@ -2,18 +2,20 @@ use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use indexmap::{IndexMap, IndexSet};
 use once_cell::sync::Lazy;
 use once_cell::unsync::OnceCell;
+use ropey::Rope;
 use skidder::Repo;
 use tree_sitter::Grammar;
 
 use crate::config::{LanguageConfig, LanguageLoader};
 use crate::fixtures::{check_highlighter_fixture, check_injection_fixture};
-use crate::highlighter::Highlight;
+use crate::highlighter::{Highlight, Highlighter};
 use crate::injections_query::InjectionLanguageMarker;
-use crate::{Language, Layer};
+use crate::{Language, Layer, Syntax};
 
 static GRAMMARS: Lazy<Vec<PathBuf>> = Lazy::new(|| {
     let skidder_config = skidder_config();
@@ -444,4 +446,52 @@ fn injection_precedence() {
     "#,
     );
     injection_fixture(&loader, "injections/overlapping_injection.rs");
+}
+
+#[test]
+fn highlight_matches_in_order() {
+    let loader = TestLanguageLoader::new();
+    let lang = loader.get("rust");
+    let src = r#"
+        /// ```
+        /// /// `Something`
+        /// /// Anything
+        /// ```
+        fn test(x: i32) -> i32 {
+            let y = x + 1;
+            y
+        }       
+    "#;
+    let rope = Rope::from_str(src);
+    let slice = rope.slice(..);
+    let syntax = Syntax::new(slice, lang, Duration::from_secs(60), &loader).unwrap();
+    let mut highlighter = Highlighter::new(&syntax, slice, &loader, ..);
+    let mut pos = highlighter.next_event_offset();
+    let end = src.len();
+    let mut loops = 0;
+
+    while pos < end as u32 {
+        highlighter.advance();
+        let start = pos;
+        let mut next = highlighter.next_event_offset();
+        if next == u32::MAX {
+            next = src.len() as u32
+        }
+
+        assert!(
+            next != start,
+            "Highlight position did not advance at position {}",
+            start
+        );
+        assert!(
+            next > start,
+            "Highlight position went backwards: {} -> {}",
+            start,
+            next
+        );
+
+        pos = next;
+        loops += 1;
+    }
+    assert!(loops > 1);
 }
