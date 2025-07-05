@@ -194,6 +194,7 @@ fn lang_for_path(path: &Path, loader: &TestLanguageLoader) -> Language {
         "css" => loader.get("css"),
         "erl" => loader.get("erlang"),
         "md" => loader.get("markdown"),
+        "c" => loader.get("c"),
         extension => panic!("unknown file type .{extension}"),
     }
 }
@@ -555,4 +556,16 @@ fn edoc_code_combined_injection_in_markdown() {
         &loader,
         "highlighter/edoc_code_combined_injection_in_markdown.md",
     );
+}
+
+#[test]
+fn rust_locals_scope_conflict() {
+    let loader = TestLanguageLoader::new();
+    highlight_fixture(&loader, "highlighter/rust_locals_scope_conflict.rs");
+}
+
+#[test]
+fn c_locals() {
+    let loader = TestLanguageLoader::new();
+    highlight_fixture(&loader, "highlighter/c_locals.c");
 }
